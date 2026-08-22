@@ -22,21 +22,31 @@ export interface ColorScale {
   shades: Record<ColorShadeKey, string>;
 }
 
+export interface SemanticSurfaceRoles {
+  "surface-base": string;
+  "surface-container": string;
+  "border-subtle": string;
+  "interactive-accent": string;
+  "text-primary": string;
+  "text-muted": string;
+}
+
 export interface DesignTokens {
   meta: {
     brandName: string;
-    industry: string;
+    industry: IndustryOption;
     designStyle: DesignStyle;
     personality: PersonalityOption;
     density: DensityOption;
     generatedAt: string; // ISO timestamp
   };
   colors: {
+    semantic: SemanticSurfaceRoles;
     primary: ColorScale;
     secondary: ColorScale;
     accent: ColorScale;
     neutral: ColorScale;
-    semantic: {
+    status: {
       success: string;
       warning: string;
       error: string;
@@ -124,11 +134,8 @@ export interface GenerateTokensRequest {
 
 export interface RawLLMTokenOutput {
   colors: {
-    primary: string; // hex, base color only
-    secondary: string;
-    accent: string;
-    neutral: string;
-    semantic: {
+    semantic: SemanticSurfaceRoles;
+    status: {
       success: string;
       warning: string;
       error: string;

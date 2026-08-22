@@ -183,6 +183,10 @@ export function generateColorScale(baseHex: string): ColorScale {
   return { base: baseHex.toUpperCase(), shades };
 }
 
+function hexOrFallback(value: string, fallback: string): string {
+  return /^#[0-9a-f]{6}$/i.test(value) ? value : fallback;
+}
+
 // ============================================
 // التجميع النهائي: من RawLLMTokenOutput + designStyle → DesignTokens كامل
 // ============================================
@@ -197,10 +201,9 @@ export function buildFinalTokens(
   // كنص/عناصر UI فوق خلفية فاتحة. لو الـ UI هيستخدم dark mode لاحقاً،
   // ده هيحتاج معالجة إضافية في v2.
   const WHITE = "#FFFFFF";
-  const safePrimary = ensureContrast(raw.colors.primary, WHITE);
-  const safeSecondary = ensureContrast(raw.colors.secondary, WHITE);
-  const safeAccent = ensureContrast(raw.colors.accent, WHITE);
-  const safeNeutral = ensureContrast(raw.colors.neutral, WHITE);
+  const safeAccent = ensureContrast(raw.colors.semantic["interactive-accent"], WHITE);
+  const safeTextPrimary = ensureContrast(raw.colors.semantic["text-primary"], WHITE);
+  const safeTextMuted = ensureContrast(raw.colors.semantic["text-muted"], WHITE);
 
   return {
     meta: {
@@ -212,14 +215,24 @@ export function buildFinalTokens(
       generatedAt: new Date().toISOString(),
     },
     colors: {
-      primary: generateColorScale(safePrimary),
-      secondary: generateColorScale(safeSecondary),
-      accent: generateColorScale(safeAccent),
-      neutral: generateColorScale(safeNeutral),
       semantic: {
-        success: ensureContrast(raw.colors.semantic.success, WHITE),
-        warning: ensureContrast(raw.colors.semantic.warning, WHITE),
-        error: ensureContrast(raw.colors.semantic.error, WHITE),
+        "surface-base": raw.colors.semantic["surface-base"],
+        "surface-container": raw.colors.semantic["surface-container"],
+        "border-subtle": raw.colors.semantic["border-subtle"],
+        "interactive-accent": safeAccent,
+        "text-primary": safeTextPrimary,
+        "text-muted": safeTextMuted,
+      },
+      primary: generateColorScale(safeAccent),
+      secondary: generateColorScale(
+        hexOrFallback(raw.colors.semantic["surface-container"], safeTextMuted)
+      ),
+      accent: generateColorScale(safeAccent),
+      neutral: generateColorScale(safeTextMuted),
+      status: {
+        success: ensureContrast(raw.colors.status.success, WHITE),
+        warning: ensureContrast(raw.colors.status.warning, WHITE),
+        error: ensureContrast(raw.colors.status.error, WHITE),
       },
     },
     typography: {

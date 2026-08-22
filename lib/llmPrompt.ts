@@ -1,5 +1,6 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { ALLOWED_FONTS, STYLE_PRESETS } from "./constants";
+import { getVisualReferences } from "./referencesIndex";
 import { QuestionnaireInput, ExtractedLogoColors, RawLLMTokenOutput } from "./types";
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
@@ -11,8 +12,12 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
  * - لو فيه ألوان مستخرجة من اللوجو، لازم يستخدمها كنقطة انطلاق
  *   حقيقية مش يتجاهلها ويخترع ألوان تانية.
  */
-function buildSystemPrompt(designStyle: keyof typeof STYLE_PRESETS): string {
+function buildSystemPrompt(
+  designStyle: keyof typeof STYLE_PRESETS,
+  industry: QuestionnaireInput["industry"]
+): string {
   const styleInfo = STYLE_PRESETS[designStyle];
+  const references = getVisualReferences(designStyle, industry);
 
   return `أنت خبير Design Systems متخصص في بناء design tokens لتطبيقات وواجهات حقيقية.
 مهمتك: تحويل معلومات عن براند (industry, personality, density, ألوان اللوجو لو موجودة)
@@ -20,21 +25,25 @@ function buildSystemPrompt(designStyle: keyof typeof STYLE_PRESETS): string {
 (ليس قرارك)، وأنت مُلزم بالتوافق معه.
 
 الـ design style المُختار: "${styleInfo.label}" — ${styleInfo.description}
+المراجع البصرية المُلزمة: ${references.products.join(", ")}.
+تركيز المراجع: ${references.focus}
 
 قواعد صارمة يجب الالتزام بها:
 1. اختر الخطوط (headingFont, bodyFont) فقط من هذه القائمة، بالضبط كما هي مكتوبة:
    ${ALLOWED_FONTS.join(", ")}
    اختر خطوطاً تناسب طابع "${styleInfo.label}" تحديداً (مثال: خطوط geometric/bold
    تناسب neo-brutalism، خطوط أنيقة خفيفة تناسب minimal أو glassmorphism).
-2. إذا توفرت ألوان مستخرجة من اللوجو، استخدمها كأساس حقيقي لـ primary/secondary/accent —
+2. إذا توفرت ألوان مستخرجة من اللوجو، استخدم hue رئيسياً منها كأساس لـ interactive-accent —
    لا تتجاهلها ولا تخترع ألوان بديلة كاملة. يمكنك تعديل الإضاءة (lightness) بسيطاً
    فقط إذا لزم لضمان التباين، لكن الـ hue الأساسي يجب أن يبقى من اللوجو.
-3. إذا لم تتوفر ألوان من اللوجو، ابنِ palette متماسكة (primary + secondary + accent)
+3. إذا لم تتوفر ألوان من اللوجو، ابنِ palette متماسكة حول interactive-accent
    متجانسة مع الـ industry والـ personality المحددة، وتناسب طابع "${styleInfo.label}"
    (مثال: neo-brutalism يميل لألوان جريئة صريحة، minimal يميل لألوان محايدة هادئة،
    glassmorphism يميل لألوان فاتحة/pastel تناسب الشفافية). تجنب الافتراضي الشائع
    (indigo/purple gradient) إلا إذا كان مبرراً فعلاً بالسياق.
-4. neutral color: دائماً درجة رمادية (يمكن أن تميل قليلاً للحرارة أو البرودة حسب باقي الألوان).
+4. surface-base و surface-container يجب أن يكونا سطوحاً هادئة ومناسبة للنمط، وليس لون accent.
+   border-subtle يجب أن يكون rgba منخفض الشدة مثل rgba(15, 23, 42, 0.1).
+   text-primary و text-muted يجب أن يحققَا قراءة واضحة فوق surface-base.
 5. الألوان الدلالية (success/warning/error): استخدم قيم واضحة الدلالة
    (أخضر/أصفر أو برتقالي/أحمر) لكن منسجمة مع الـ palette العام وليست صارخة بلا داعٍ.
 6. لا تقترح قيم radius أو shadow — هذه القيم محددة مسبقاً حسب الـ style ولا تدخل ضمن مهمتك.
@@ -43,11 +52,15 @@ function buildSystemPrompt(designStyle: keyof typeof STYLE_PRESETS): string {
 
 {
   "colors": {
-    "primary": "#RRGGBB",
-    "secondary": "#RRGGBB",
-    "accent": "#RRGGBB",
-    "neutral": "#RRGGBB",
     "semantic": {
+      "surface-base": "#RRGGBB",
+      "surface-container": "#RRGGBB",
+      "border-subtle": "rgba(15, 23, 42, 0.1)",
+      "interactive-accent": "#RRGGBB",
+      "text-primary": "#RRGGBB",
+      "text-muted": "#RRGGBB"
+    },
+    "status": {
       "success": "#RRGGBB",
       "warning": "#RRGGBB",
       "error": "#RRGGBB"
@@ -105,7 +118,7 @@ export async function generateRawTokens(
 ): Promise<RawLLMTokenOutput> {
   const model = genAI.getGenerativeModel({
     model: "gemini-3.6-flash",
-    systemInstruction: buildSystemPrompt(questionnaire.designStyle),
+    systemInstruction: buildSystemPrompt(questionnaire.designStyle, questionnaire.industry),
     generationConfig: {
       responseMimeType: "application/json",
     },
@@ -143,10 +156,23 @@ function validateRawShape(data: unknown): asserts data is RawLLMTokenOutput {
     throw new Error("LLM response missing required top-level keys");
   }
   const colors = d.colors as Record<string, unknown>;
-  const requiredColors = ["primary", "secondary", "accent", "neutral", "semantic"];
+  const requiredColors = ["semantic", "status"];
   for (const key of requiredColors) {
     if (!colors[key]) {
       throw new Error(`LLM response missing colors.${key}`);
+    }
+  }
+  const semantic = colors.semantic as Record<string, unknown>;
+  for (const key of [
+    "surface-base",
+    "surface-container",
+    "border-subtle",
+    "interactive-accent",
+    "text-primary",
+    "text-muted",
+  ]) {
+    if (typeof semantic[key] !== "string" || !semantic[key]) {
+      throw new Error(`LLM response missing colors.semantic.${key}`);
     }
   }
   const typography = d.typography as Record<string, unknown> | undefined;

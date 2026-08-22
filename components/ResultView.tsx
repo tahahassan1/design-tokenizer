@@ -20,12 +20,12 @@ export default function ResultView({ tokens, onReset }: ResultViewProps) {
   }
 
   function handleDownloadJson() {
-    const filename = `${tokens.meta.brandName.replace(/\s+/g, "-").toLowerCase()}-tokens.json`;
+    const filename = `brand-tokens.json`;
     downloadFile(JSON.stringify(tokens, null, 2), filename, "application/json");
   }
 
   function handleDownloadMarkdown() {
-    const filename = `${tokens.meta.brandName.replace(/\s+/g, "-").toLowerCase()}-design-guidelines.md`;
+    const filename = `design-guidelines.md`;
     downloadFile(generateDesignGuidelines(tokens), filename, "text/markdown");
   }
 
@@ -95,7 +95,7 @@ export default function ResultView({ tokens, onReset }: ResultViewProps) {
                 key={key}
                 className="text-xs px-2 py-1 rounded"
                 style={{
-                  backgroundColor: tokens.colors.semantic[key],
+                  backgroundColor: tokens.colors.status[key],
                   color: "#FFFFFF",
                 }}
               >
